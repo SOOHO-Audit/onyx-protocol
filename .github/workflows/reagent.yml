@@ -1,0 +1,37 @@
+name: Run Reagent static analyzer
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/astean1001/corvus:0.0.5
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Load code to Reagent
+        run: |
+          /codeql/codeql database create /reagent-db --language=solidity --source-root ./ --overwrite
+      - name: Run Detector
+        run: |
+          /codeql/codeql database analyze --format=sarif-latest --output=result.sarif -- /reagent-db /home/ubuntu/codeql-solidity/solidity/ql/src/codeql-suites/solidity-security-and-quality.qls
+          sed -i 's/CodeQL/Reagent/g' "result.sarif"
+          sed -i 's/GitHub/SOOHO.IO/g' "result.sarif"
+      - name: Generate PDF Report
+        run : |
+          python3 /gen_report/generate_report.py ${{ github.sha }}
+          google-chrome --no-sandbox --headless --disable-gpu --print-to-pdf=report.pdf file:///gen_report/report.html
+      - name: Upload SARIF FIle
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: result.sarif
+      - name: Upload generated file as artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: report
+          path: report.pdf
